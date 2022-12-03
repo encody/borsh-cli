@@ -1,0 +1,18 @@
+[package]
+authors = ["Jacob Lindahl"]
+categories = ["encoding", "command-line-utilities"]
+description = "Command-line utility for manipulating Borsh-serialized data"
+edition = "2021"
+license = "GPL-3.0"
+name = "borsh-cli"
+version = "0.1.0"
+
+[dependencies]
+borsh = "0.9.3"
+clap = {version = "4.0.29", features = ["derive"]}
+serde = {version = "1.0.148", features = ["derive"]}
+serde_json = {version = "1.0.89", features = ["preserve_order"]}
+
+[[bin]]
+name = "borsh"
+path = "src/main.rs"
