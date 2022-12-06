@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{Error, Write};
+use std::str::FromStr;
 
 use anyhow::anyhow;
 use borsh::schema::{BorshSchemaContainer, Definition, Fields};
@@ -7,48 +8,39 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde_json::json;
 use thiserror::Error;
 
+fn deserialize_type<T: BorshDeserialize + Into<serde_json::Value>>(
+    buf: &mut &[u8],
+    type_name: &str,
+) -> std::io::Result<serde_json::Value> {
+    T::deserialize(buf)
+        .map(Into::into)
+        .map_err(|_| Error::new(std::io::ErrorKind::InvalidData, type_name))
+}
+
 pub fn deserialize_declaration_from_schema(
     buf: &mut &[u8],
     schema: &BorshSchemaContainer,
     declaration: &borsh::schema::Declaration,
 ) -> std::io::Result<serde_json::Value> {
     match &declaration[..] {
-        "u8" => u8::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u8")),
-        "u16" => u16::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u16")),
-        "u32" => u32::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u32")),
-        "u64" => u64::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u64")),
+        "u8" => deserialize_type::<u8>(buf, "u8"),
+        "u16" => deserialize_type::<u16>(buf, "u16"),
+        "u32" => deserialize_type::<u32>(buf, "u32"),
+        "u64" => deserialize_type::<u64>(buf, "u64"),
         "u128" => u128::deserialize(buf)
             .map(|x| x.to_string().into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u128")),
-        "i8" => i8::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i8")),
-        "i16" => i16::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i16")),
-        "i32" => i32::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i32")),
-        "i64" => i64::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i64")),
+            .map_err(|_| Error::new(std::io::ErrorKind::InvalidData, "u128")),
+        "i8" => deserialize_type::<i8>(buf, "i8"),
+        "i16" => deserialize_type::<i16>(buf, "i16"),
+        "i32" => deserialize_type::<i32>(buf, "i32"),
+        "i64" => deserialize_type::<i64>(buf, "i64"),
         "i128" => i128::deserialize(buf)
             .map(|x| x.to_string().into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i128")),
-        "string" => String::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "string")),
-        "bool" => bool::deserialize(buf)
-            .map(|x| x.into())
-            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "bool")),
+            .map_err(|_| Error::new(std::io::ErrorKind::InvalidData, "i128")),
+        "f32" => deserialize_type::<f32>(buf, "f32"),
+        "f64" => deserialize_type::<f64>(buf, "f64"),
+        "string" => deserialize_type::<String>(buf, "string"),
+        "bool" => deserialize_type::<bool>(buf, "bool"),
 
         _ => {
             if let Some(d) = schema.definitions.get(declaration) {
@@ -158,6 +150,51 @@ pub fn serialize_with_schema(
     serialize_declaration_with_schema(writer, value, schema, &schema.declaration)
 }
 
+fn serialize_signed<T: BorshSerialize + TryFrom<i64>>(
+    writer: &mut impl Write,
+    value: &serde_json::Value,
+) -> anyhow::Result<()>
+where
+    <T as TryFrom<i64>>::Error: std::error::Error + Send + Sync + 'static,
+{
+    let v = value
+        .as_i64()
+        .ok_or(ExpectationError::Number)
+        .map(T::try_from)??;
+    BorshSerialize::serialize(&v, writer)?;
+    Ok(())
+}
+
+fn serialize_unsigned<T: BorshSerialize + TryFrom<u64>>(
+    writer: &mut impl Write,
+    value: &serde_json::Value,
+) -> anyhow::Result<()>
+where
+    <T as TryFrom<u64>>::Error: std::error::Error + Send + Sync + 'static,
+{
+    let v = value
+        .as_u64()
+        .ok_or(ExpectationError::Number)
+        .map(T::try_from)??;
+    BorshSerialize::serialize(&v, writer)?;
+    Ok(())
+}
+
+fn serialize_string<'a, T: BorshSerialize + FromStr>(
+    writer: &mut impl Write,
+    value: &'a serde_json::Value,
+) -> anyhow::Result<()>
+where
+    <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
+{
+    let v = value
+        .as_str()
+        .ok_or(ExpectationError::String)
+        .map(T::from_str)??;
+    BorshSerialize::serialize(&v, writer)?;
+    Ok(())
+}
+
 pub fn serialize_declaration_with_schema(
     writer: &mut impl Write,
     value: &serde_json::Value,
@@ -165,85 +202,17 @@ pub fn serialize_declaration_with_schema(
     declaration: &borsh::schema::Declaration,
 ) -> anyhow::Result<()> {
     match &declaration[..] {
-        "u8" => {
-            let v = value
-                .as_u64()
-                .ok_or(ExpectationError::Number)
-                .map(u8::try_from)??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "u16" => {
-            let v = value
-                .as_u64()
-                .ok_or(ExpectationError::Number)
-                .map(u16::try_from)??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "u32" => {
-            let v = value
-                .as_u64()
-                .ok_or(ExpectationError::Number)
-                .map(u32::try_from)??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "u64" => {
-            let v = value.as_u64().ok_or(ExpectationError::Number)?;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "u128" => {
-            let v: u128 = value
-                .as_str()
-                .ok_or(ExpectationError::String)
-                .map(|x| x.parse())??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "i8" => {
-            let v = value
-                .as_i64()
-                .ok_or(ExpectationError::Number)
-                .map(i8::try_from)??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "i16" => {
-            let v = value
-                .as_i64()
-                .ok_or(ExpectationError::Number)
-                .map(i16::try_from)??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "i32" => {
-            let v = value
-                .as_i64()
-                .ok_or(ExpectationError::Number)
-                .map(i32::try_from)??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "i64" => {
-            let v = value.as_u64().ok_or(ExpectationError::Number)?;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "i128" => {
-            let v: i128 = value
-                .as_str()
-                .ok_or(ExpectationError::String)
-                .map(|x| x.parse())??;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
-        "string" => {
-            let v = value.as_str().ok_or(ExpectationError::String)?;
-            BorshSerialize::serialize(&v, writer)?;
-            Ok(())
-        }
+        "u8" => serialize_unsigned::<u8>(writer, value),
+        "u16" => serialize_unsigned::<u16>(writer, value),
+        "u32" => serialize_unsigned::<u32>(writer, value),
+        "u64" => serialize_unsigned::<u64>(writer, value),
+        "u128" => serialize_string::<u128>(writer, value),
+        "i8" => serialize_signed::<i8>(writer, value),
+        "i16" => serialize_signed::<i16>(writer, value),
+        "i32" => serialize_signed::<i32>(writer, value),
+        "i64" => serialize_signed::<i64>(writer, value),
+        "i128" => serialize_string::<i128>(writer, value),
+        "string" => serialize_string::<String>(writer, value),
         "bool" => {
             let v = value.as_bool().ok_or(ExpectationError::Boolean)?;
             BorshSerialize::serialize(&v, writer)?;
