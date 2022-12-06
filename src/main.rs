@@ -4,11 +4,13 @@ use std::{
     path::PathBuf,
 };
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{schema::BorshSchemaContainer, BorshDeserialize, BorshSchema, BorshSerialize};
 use clap::{Parser, Subcommand};
+use serde::Serialize;
 
 use crate::json_borsh::JsonSerializableAsBorsh;
 
+mod dynamic_schema;
 mod json_borsh;
 
 #[derive(Parser, Debug)]
@@ -29,6 +31,10 @@ enum Command {
         /// Write output this file, otherwise to STDOUT.
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// By default, the Borsh schema is included in the header. Enable this flag to remove it.
+        #[arg(short, long)]
+        no_schema: bool,
     },
     /// Deserialize the input as a simple binary blob with Borsh headers.
     Unpack {
@@ -39,6 +45,10 @@ enum Command {
         /// Write output this file, otherwise to STDOUT.
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// By default, we assume the Borsh schema is included in the header. Enable this flag to prevent this.
+        #[arg(short, long)]
+        no_schema: bool,
     },
     /// Convert JSON to Borsh.
     ///
@@ -55,9 +65,11 @@ enum Command {
 
         /// Schema to follow when serializing.
         #[arg(short, long)]
-        schema: Option<String>,
+        schema: Option<PathBuf>,
     },
-    /// NOT IMPLEMENTED -- Decode Borsh input to JSON.
+    /// Decode Borsh input to JSON.
+    ///
+    /// Requires the input to contain the embedded schema.
     Decode {
         /// Read input from this file if STDIN is empty.
         #[arg(short, long)]
@@ -66,14 +78,23 @@ enum Command {
         /// Write output this file, otherwise to STDOUT.
         #[arg(short, long)]
         output: Option<PathBuf>,
-
-        /// Schema to follow when deserializing.
+        // /// Schema to follow when deserializing.
+        // #[arg(short, long)]
+        // schema: String,
+    },
+    /// Extracts the Borsh schema header
+    ExtractSchema {
+        /// Read input from this file if STDIN is empty.
         #[arg(short, long)]
-        schema: String,
+        input: Option<PathBuf>,
+
+        /// Write output this file, otherwise to STDOUT.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 
-fn input_bytes(input_path: Option<&PathBuf>) -> Vec<u8> {
+fn get_input_bytes(input_path: Option<&PathBuf>) -> Vec<u8> {
     input_path
         .map(|path| {
             fs::read(path)
@@ -88,15 +109,40 @@ fn input_bytes(input_path: Option<&PathBuf>) -> Vec<u8> {
         })
 }
 
-fn output_borsh(output: Option<&PathBuf>, value: impl BorshSerialize) {
+fn output_writer(output: Option<&PathBuf>) -> Box<dyn Write> {
+    if let Some(o) = output {
+        let f = fs::File::create(o)
+            .unwrap_or_else(|_| panic!("Could not create output file {}", o.display()));
+        Box::new(f) as Box<dyn Write>
+    } else {
+        Box::new(io::stdout()) as Box<dyn Write>
+    }
+}
+
+fn output_borsh(
+    output: Option<&PathBuf>,
+    value: &impl BorshSerialize,
+    schema: Option<&BorshSchemaContainer>,
+) {
+    let writer = output_writer(output);
+
+    if let Some(schema) = schema {
+        borsh::to_writer(writer, &(schema, value))
+    } else {
+        borsh::to_writer(writer, value)
+    }
+    .expect("Failed to write Borsh to output");
+}
+
+fn output_json(output: Option<&PathBuf>, value: &impl Serialize) {
     if let Some(o) = output {
         let path = o.display();
         let f =
             fs::File::create(o).unwrap_or_else(|_| panic!("Could not create output file {path}"));
-        borsh::to_writer(f, &value)
-            .unwrap_or_else(|_| panic!("Could not write to output file {path}"));
+        serde_json::to_writer(f, &value)
+            .unwrap_or_else(|_| panic!("Could not write JSON to output file {path}"));
     } else {
-        borsh::to_writer(io::stdout(), &value).expect("Could not write to STDOUT");
+        serde_json::to_writer(io::stdout(), &value).expect("Could not write JSON to STDOUT");
     }
 }
 
@@ -104,16 +150,40 @@ fn main() {
     let args = Args::parse();
 
     match &args.command {
-        Command::Pack { input, output } => {
-            let input_bytes = input_bytes(input.as_ref());
+        Command::Pack {
+            input,
+            output,
+            no_schema,
+        } => {
+            let input_bytes = get_input_bytes(input.as_ref());
 
-            output_borsh(output.as_ref(), input_bytes);
+            let schema = Vec::<u8>::schema_container();
+
+            output_borsh(
+                output.as_ref(),
+                &input_bytes,
+                if *no_schema { None } else { Some(&schema) },
+            );
         }
-        Command::Unpack { input, output } => {
-            let input_bytes = input_bytes(input.as_ref());
+        Command::Unpack {
+            input,
+            output,
+            no_schema,
+        } => {
+            let input_bytes = get_input_bytes(input.as_ref());
 
-            let value = Vec::<u8>::try_from_slice(&input_bytes)
-                .expect("Could not read input as byte array");
+            let value = if *no_schema {
+                Vec::<u8>::try_from_slice(&input_bytes).expect("Could not read input as byte array")
+            } else {
+                let (schema, v) = <(BorshSchemaContainer, Vec<u8>)>::try_from_slice(&input_bytes)
+                    .expect("Could not read input as byte array with schema headers");
+                assert_eq!(
+                    schema,
+                    Vec::<u8>::schema_container(),
+                    "Incorrect schema header",
+                );
+                v
+            };
 
             if let Some(o) = output {
                 let mut f = fs::File::create(o)
@@ -132,25 +202,115 @@ fn main() {
             output,
             schema,
         } => {
-            if schema.is_some() {
-                todo!("schema is not supported");
-            }
-
-            let input_bytes = input_bytes(input.as_ref());
+            let input_bytes = get_input_bytes(input.as_ref());
 
             let v = serde_json::from_slice::<serde_json::Value>(&input_bytes)
                 .expect("Could not parse input as JSON");
 
-            let v = JsonSerializableAsBorsh(&v);
+            if let Some(schema_path) = schema {
+                let schema_bytes = get_input_bytes(Some(schema_path));
+                let mut writer = output_writer(output.as_ref());
+                let schema = <BorshSchemaContainer as BorshDeserialize>::deserialize(
+                    &mut (&schema_bytes as &[u8]),
+                )
+                .expect("Could not parse schema");
+                BorshSerialize::serialize(&schema, &mut writer)
+                    .expect("could not serialize schema to output");
+                dynamic_schema::serialize_with_schema(&mut writer, &v, &schema)
+                    .expect("Could not write output");
+            } else {
+                let v = JsonSerializableAsBorsh(&v);
 
-            output_borsh(output.as_ref(), v);
+                output_borsh(output.as_ref(), &v, None);
+            }
         }
-        Command::Decode { .. } => todo!(),
+        Command::Decode { input, output, .. } => {
+            let input_bytes = get_input_bytes(input.as_ref());
+
+            let mut buf = &input_bytes as &[u8];
+
+            let schema = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
+
+            let value = dynamic_schema::deserialize_from_schema(&mut buf, &schema)
+                .expect("Unable to deserialize according to embedded schema");
+
+            output_json(output.as_ref(), &value);
+        }
+        Command::ExtractSchema { input, output } => {
+            let input_bytes = get_input_bytes(input.as_ref());
+
+            let mut buf = &input_bytes as &[u8];
+            dbg!("buf len: {}", buf.len());
+
+            let schema = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
+
+            output_borsh(output.as_ref(), &schema, None);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use borsh::{BorshSchema, BorshSerialize};
+    use serde::Serialize;
+
+    use crate::{output_borsh, output_json};
+
+    #[test]
+    fn test_schema() {
+        #[derive(BorshSerialize, BorshSchema, Serialize)]
+        struct First {
+            a: (u32, u64),
+            b: String,
+            c: Second,
+            // d: HashMap<String, bool>,
+            e: Vec<String>,
+        }
+
+        #[derive(BorshSerialize, BorshSchema, Serialize)]
+        struct Second {
+            a: Third,
+            b: Third,
+            c: Third,
+            d: u32,
+            e: u32,
+        }
+
+        #[derive(BorshSerialize, BorshSchema, Serialize)]
+        enum Third {
+            Alpha { field: u32 },
+            Beta(u32),
+            Gamma,
+        }
+
+        dbg!("{:?}", First::schema_container());
+        // return;
+        let v = First {
+            a: (32, 64),
+            b: "String".to_string(),
+            c: Second {
+                a: Third::Alpha { field: 1 },
+                b: Third::Beta(1),
+                c: Third::Gamma,
+                d: 2,
+                e: 3,
+            },
+            // d: vec![("true".to_string(), true), ("false".to_string(), false)]
+            //     .into_iter()
+            //     .collect(),
+            e: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        };
+        output_json(
+            Some(&"./dataonly.json".into()),
+            &v,
+            // Some(&First::schema_container()),
+        );
+        output_borsh(
+            Some(&"./dataandschema.borsh".into()),
+            &v,
+            Some(&First::schema_container()),
+        );
+    }
 
     #[test]
     fn ensure_key_order_is_preserved() {
