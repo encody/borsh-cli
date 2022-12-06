@@ -49,7 +49,6 @@ pub fn deserialize_declaration_from_schema(
                         length,
                         ref elements,
                     } => {
-                        dbg!("array");
                         let mut v = Vec::<serde_json::Value>::with_capacity(*length as usize);
                         for _ in 0..*length {
                             let e = deserialize_declaration_from_schema(buf, schema, elements)?;
@@ -58,7 +57,6 @@ pub fn deserialize_declaration_from_schema(
                         Ok(v.into())
                     }
                     Definition::Sequence { elements } => {
-                        dbg!("sequence");
                         let length = u32::deserialize(buf)?;
                         let mut v = Vec::<serde_json::Value>::with_capacity(length as usize);
                         for _ in 0..length {
@@ -68,7 +66,6 @@ pub fn deserialize_declaration_from_schema(
                         Ok(v.into())
                     }
                     Definition::Tuple { elements } => {
-                        dbg!("tuple");
                         // try_collect not stable :'(
                         let mut v = Vec::<serde_json::Value>::with_capacity(elements.len());
                         for element in elements {
@@ -78,14 +75,12 @@ pub fn deserialize_declaration_from_schema(
                         Ok(v.into())
                     }
                     Definition::Enum { variants } => {
-                        dbg!("enum");
                         let variant_index = u8::deserialize(buf)?;
                         let (variant_name, variant_declaration) = &variants[variant_index as usize];
                         deserialize_declaration_from_schema(buf, schema, variant_declaration)
                             .map(|v| json!({ variant_name: v }))
                     }
                     Definition::Struct { fields } => {
-                        dbg!("struct");
                         match fields {
                             Fields::NamedFields(fields) => {
                                 let mut object = HashMap::<String, serde_json::Value>::new();
@@ -222,7 +217,6 @@ pub fn serialize_declaration_with_schema(
             if let Some(definition) = schema.definitions.get(declaration) {
                 match definition {
                     Definition::Array { length, elements } => {
-                        dbg!("Definition::Array");
                         let array = value.as_array().ok_or(ExpectationError::Array)?;
                         if array.len() != *length as usize {
                             return Err(ExpectationError::ArrayOfLength(*length).into());
@@ -233,7 +227,6 @@ pub fn serialize_declaration_with_schema(
                         Ok(())
                     }
                     Definition::Sequence { elements } => {
-                        dbg!("Definition::Sequence");
                         let sequence = value.as_array().ok_or(ExpectationError::Array)?;
                         BorshSerialize::serialize(&(sequence.len() as u32), writer)?;
                         for item in sequence {
@@ -242,7 +235,6 @@ pub fn serialize_declaration_with_schema(
                         Ok(())
                     }
                     Definition::Tuple { elements } => {
-                        dbg!("Definition::Tuple");
                         let tuple = value.as_array().ok_or(ExpectationError::Array)?;
                         if tuple.len() != elements.len() {
                             // TODO: double-check the lack of casting to u32
@@ -256,15 +248,11 @@ pub fn serialize_declaration_with_schema(
                         Ok(())
                     }
                     Definition::Enum { variants } => {
-                        dbg!("enum {:?}", variants);
-                        dbg!("{value:?}");
                         let (input_variant, variant_values) = value
                             .as_object()
                             .and_then(|o| o.keys().next().map(|s| (s.as_str(), Some(&o[s]))))
                             .or_else(|| value.as_str().map(|s| (s, None)))
                             .ok_or(ExpectationError::Object)?;
-
-                        dbg!("{variant_values:?}");
 
                         let (variant_index, variant_declaration) = variants
                             .iter()
@@ -309,14 +297,11 @@ pub fn serialize_declaration_with_schema(
                         }
                         Fields::UnnamedFields(fields) => {
                             if fields.len() == 1 {
-                                dbg!("One unnamed field");
                                 serialize_declaration_with_schema(
                                     writer, value, schema, &fields[0],
                                 )?;
                                 return Ok(());
                             }
-
-                            dbg!("Multiple unnamed fields");
 
                             let array = value.as_array().ok_or(ExpectationError::Array)?;
                             if array.len() != fields.len() {

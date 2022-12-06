@@ -14,7 +14,10 @@ mod dynamic_schema;
 mod json_borsh;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version)]
+/// Command-line utility for manipulating Borsh-serialized data
+/// 
+/// Note: Does not play particularly nicely with `HashMap<_, _>` types.
 struct Args {
     #[command(subcommand)]
     command: Command,
@@ -78,12 +81,19 @@ enum Command {
         /// Write output this file, otherwise to STDOUT.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        // /// Schema to follow when deserializing.
-        // #[arg(short, long)]
-        // schema: String,
     },
     /// Extracts the Borsh schema header
-    ExtractSchema {
+    Extract {
+        /// Read input from this file if STDIN is empty.
+        #[arg(short, long)]
+        input: Option<PathBuf>,
+
+        /// Write output this file, otherwise to STDOUT.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Removes the Borsh schema header
+    Strip {
         /// Read input from this file if STDIN is empty.
         #[arg(short, long)]
         input: Option<PathBuf>,
@@ -224,7 +234,7 @@ fn main() {
                 output_borsh(output.as_ref(), &v, None);
             }
         }
-        Command::Decode { input, output, .. } => {
+        Command::Decode { input, output } => {
             let input_bytes = get_input_bytes(input.as_ref());
 
             let mut buf = &input_bytes as &[u8];
@@ -236,15 +246,23 @@ fn main() {
 
             output_json(output.as_ref(), &value);
         }
-        Command::ExtractSchema { input, output } => {
+        Command::Extract { input, output } => {
             let input_bytes = get_input_bytes(input.as_ref());
 
             let mut buf = &input_bytes as &[u8];
-            dbg!("buf len: {}", buf.len());
 
             let schema = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
 
             output_borsh(output.as_ref(), &schema, None);
+        }
+        Command::Strip { input, output } => {
+            let input_bytes = get_input_bytes(input.as_ref());
+
+            let mut buf = &input_bytes as &[u8];
+
+            let _ = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
+
+            output_writer(output.as_ref()).write_all(buf).expect("Unable to write output");
         }
     }
 }
@@ -301,6 +319,7 @@ mod tests {
             //     .collect(),
             e: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         };
+        borsh::try_to_vec_with_schema(&v);
         output_json(
             Some(&"./dataonly.json".into()),
             &v,
