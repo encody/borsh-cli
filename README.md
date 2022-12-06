@@ -5,18 +5,34 @@ Command line utility for basic [Borsh](https://borsh.io/)-serialized data manipu
 ## Usage
 
 ```text
+Command-line utility for manipulating Borsh-serialized data
+
+Note: Does not play particularly nicely with `HashMap<_, _>` types.
+
 Usage: borsh[EXE] <COMMAND>
 
 Commands:
-  pack    Serialize the input as a simple binary blob with Borsh headers
-  unpack  Deserialize the input as a simple binary blob with Borsh headers
-  encode  Convert JSON to Borsh
-  decode  NOT IMPLEMENTED -- Decode Borsh input to JSON
-  help    Print this message or the help of the given subcommand(s)
+  pack
+          Serialize the input as a simple binary blob with Borsh headers
+  unpack
+          Deserialize the input as a simple binary blob with Borsh headers
+  encode
+          Convert JSON to Borsh
+  decode
+          Decode Borsh input to JSON
+  extract
+          Extracts the Borsh schema header
+  strip
+          Removes the Borsh schema header
+  help
+          Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help information
-  -V, --version  Print version information
+  -h, --help
+          Print help information (use `-h` for a summary)
+
+  -V, --version
+          Print version information
 ```
 
 Generally, every sub-command will read from STDIN and output to STDOUT unless the `-i`/`--input` flag or `-o`/`--output` flags are specified, respectively.
