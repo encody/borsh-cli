@@ -180,9 +180,9 @@ where
     Ok(())
 }
 
-fn serialize_string<'a, T: BorshSerialize + FromStr>(
+fn serialize_string<T: BorshSerialize + FromStr>(
     writer: &mut impl Write,
-    value: &'a serde_json::Value,
+    value: &serde_json::Value,
 ) -> anyhow::Result<()>
 where
     <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
