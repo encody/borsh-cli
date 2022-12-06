@@ -250,6 +250,7 @@ fn main() {
 }
 
 #[cfg(test)]
+#[allow(unused, dead_code)]
 mod tests {
     use borsh::{BorshSchema, BorshSerialize};
     use serde::Serialize;

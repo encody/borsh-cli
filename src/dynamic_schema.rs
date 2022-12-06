@@ -1,6 +1,5 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, Write};
 
 use anyhow::anyhow;
 use borsh::schema::{BorshSchemaContainer, Definition, Fields};
@@ -16,40 +15,40 @@ pub fn deserialize_declaration_from_schema(
     match &declaration[..] {
         "u8" => u8::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "u8")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u8")),
         "u16" => u16::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "u16")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u16")),
         "u32" => u32::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "u32")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u32")),
         "u64" => u64::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "u64")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u64")),
         "u128" => u128::deserialize(buf)
             .map(|x| x.to_string().into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "u128")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "u128")),
         "i8" => i8::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "i8")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i8")),
         "i16" => i16::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "i16")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i16")),
         "i32" => i32::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "i32")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i32")),
         "i64" => i64::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "i64")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i64")),
         "i128" => i128::deserialize(buf)
             .map(|x| x.to_string().into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "i128")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "i128")),
         "string" => String::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "string")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "string")),
         "bool" => bool::deserialize(buf)
             .map(|x| x.into())
-            .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, "bool")),
+            .map_err(|_e| Error::new(std::io::ErrorKind::InvalidData, "bool")),
 
         _ => {
             if let Some(d) = schema.definitions.get(declaration) {
@@ -132,7 +131,7 @@ pub fn deserialize_from_schema(
     buf: &mut &[u8],
     schema: &BorshSchemaContainer,
 ) -> std::io::Result<serde_json::Value> {
-    deserialize_declaration_from_schema(buf, &schema, &schema.declaration)
+    deserialize_declaration_from_schema(buf, schema, &schema.declaration)
 }
 
 #[derive(Error, Debug)]
@@ -169,36 +168,36 @@ pub fn serialize_declaration_with_schema(
         "u8" => {
             let v = value
                 .as_u64()
-                .ok_or_else(|| ExpectationError::Number)
-                .map(|x| u8::try_from(x))??;
+                .ok_or(ExpectationError::Number)
+                .map(u8::try_from)??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "u16" => {
             let v = value
                 .as_u64()
-                .ok_or_else(|| ExpectationError::Number)
-                .map(|x| u16::try_from(x))??;
+                .ok_or(ExpectationError::Number)
+                .map(u16::try_from)??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "u32" => {
             let v = value
                 .as_u64()
-                .ok_or_else(|| ExpectationError::Number)
-                .map(|x| u32::try_from(x))??;
+                .ok_or(ExpectationError::Number)
+                .map(u32::try_from)??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "u64" => {
-            let v = value.as_u64().ok_or_else(|| ExpectationError::Number)?;
+            let v = value.as_u64().ok_or(ExpectationError::Number)?;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "u128" => {
             let v: u128 = value
                 .as_str()
-                .ok_or_else(|| ExpectationError::String)
+                .ok_or(ExpectationError::String)
                 .map(|x| x.parse())??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
@@ -206,47 +205,47 @@ pub fn serialize_declaration_with_schema(
         "i8" => {
             let v = value
                 .as_i64()
-                .ok_or_else(|| ExpectationError::Number)
-                .map(|x| i8::try_from(x))??;
+                .ok_or(ExpectationError::Number)
+                .map(i8::try_from)??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "i16" => {
             let v = value
                 .as_i64()
-                .ok_or_else(|| ExpectationError::Number)
-                .map(|x| i16::try_from(x))??;
+                .ok_or(ExpectationError::Number)
+                .map(i16::try_from)??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "i32" => {
             let v = value
                 .as_i64()
-                .ok_or_else(|| ExpectationError::Number)
-                .map(|x| i32::try_from(x))??;
+                .ok_or(ExpectationError::Number)
+                .map(i32::try_from)??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "i64" => {
-            let v = value.as_u64().ok_or_else(|| ExpectationError::Number)?;
+            let v = value.as_u64().ok_or(ExpectationError::Number)?;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "i128" => {
             let v: i128 = value
                 .as_str()
-                .ok_or_else(|| ExpectationError::String)
+                .ok_or(ExpectationError::String)
                 .map(|x| x.parse())??;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "string" => {
-            let v = value.as_str().ok_or_else(|| ExpectationError::String)?;
+            let v = value.as_str().ok_or(ExpectationError::String)?;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
         "bool" => {
-            let v = value.as_bool().ok_or_else(|| ExpectationError::Boolean)?;
+            let v = value.as_bool().ok_or(ExpectationError::Boolean)?;
             BorshSerialize::serialize(&v, writer)?;
             Ok(())
         }
@@ -308,14 +307,16 @@ pub fn serialize_declaration_with_schema(
                                     None
                                 }
                             })
-                            .ok_or(anyhow!(
-                                "Specified variant {input_variant} does not exist in schema"
-                            ))?;
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "Specified variant {input_variant} does not exist in schema"
+                                )
+                            })?;
 
                         BorshSerialize::serialize(&(variant_index as u8), writer)?;
                         serialize_declaration_with_schema(
                             writer,
-                            &variant_values.unwrap_or(&json!({})),
+                            variant_values.unwrap_or(&json!({})),
                             schema,
                             variant_declaration,
                         )?;
@@ -325,8 +326,9 @@ pub fn serialize_declaration_with_schema(
                         Fields::NamedFields(fields) => {
                             let object = value.as_object().ok_or(ExpectationError::Object)?;
                             for (key, value_declaration) in fields {
-                                let property_value =
-                                    object.get(key).ok_or(anyhow!("Expected property {key}"))?;
+                                let property_value = object
+                                    .get(key)
+                                    .ok_or_else(|| anyhow!("Expected property {key}"))?;
                                 serialize_declaration_with_schema(
                                     writer,
                                     property_value,
