@@ -16,7 +16,7 @@ mod json_borsh;
 #[derive(Parser, Debug)]
 #[command(author, version)]
 /// Command-line utility for manipulating Borsh-serialized data
-/// 
+///
 /// Note: Does not play particularly nicely with `HashMap<_, _>` types.
 struct Args {
     #[command(subcommand)]
@@ -55,7 +55,7 @@ enum Command {
     },
     /// Convert JSON to Borsh.
     ///
-    /// Note: Schemas are not yet supported, so values that can be null (e.g. a
+    /// Note: If a schema is not specified, values that can be null (e.g. a
     /// Rust Option<T>), etc. WILL NOT be serialized correctly.
     Encode {
         /// Read input from this file if STDIN is empty.
@@ -82,7 +82,7 @@ enum Command {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Extracts the Borsh schema header
+    /// Extract the Borsh schema header.
     Extract {
         /// Read input from this file if STDIN is empty.
         #[arg(short, long)]
@@ -92,7 +92,7 @@ enum Command {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Removes the Borsh schema header
+    /// Remove the Borsh schema header.
     Strip {
         /// Read input from this file if STDIN is empty.
         #[arg(short, long)]
@@ -141,19 +141,12 @@ fn output_borsh(
     } else {
         borsh::to_writer(writer, value)
     }
-    .expect("Failed to write Borsh to output");
+    .expect("Failed to write Borsh");
 }
 
 fn output_json(output: Option<&PathBuf>, value: &impl Serialize) {
-    if let Some(o) = output {
-        let path = o.display();
-        let f =
-            fs::File::create(o).unwrap_or_else(|_| panic!("Could not create output file {path}"));
-        serde_json::to_writer(f, &value)
-            .unwrap_or_else(|_| panic!("Could not write JSON to output file {path}"));
-    } else {
-        serde_json::to_writer(io::stdout(), &value).expect("Could not write JSON to STDOUT");
-    }
+    let writer = output_writer(output);
+    serde_json::to_writer(writer, value).expect("Failed to write JSON");
 }
 
 fn main() {
@@ -195,17 +188,8 @@ fn main() {
                 v
             };
 
-            if let Some(o) = output {
-                let mut f = fs::File::create(o)
-                    .unwrap_or_else(|_| panic!("Could not create output file {}", o.display()));
-
-                f.write_all(&value)
-                    .unwrap_or_else(|_| panic!("Could not write to output file {}", o.display()));
-            } else {
-                io::stdout()
-                    .write_all(&value)
-                    .expect("Could not write to STDOUT");
-            }
+            let mut writer = output_writer(output.as_ref());
+            writer.write_all(&value).expect("Failed output");
         }
         Command::Encode {
             input,
@@ -262,7 +246,9 @@ fn main() {
 
             let _ = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
 
-            output_writer(output.as_ref()).write_all(buf).expect("Unable to write output");
+            output_writer(output.as_ref())
+                .write_all(buf)
+                .expect("Unable to write output");
         }
     }
 }
