@@ -2,6 +2,12 @@
 
 Command line utility for basic [Borsh](https://borsh.io/)-serialized data manipulations.
 
+## Install
+
+```txt
+$ cargo install borsh-cli
+```
+
 ## Usage
 
 ```text
