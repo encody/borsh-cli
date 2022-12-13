@@ -17,7 +17,7 @@ fn deserialize_type<T: BorshDeserialize + Into<serde_json::Value>>(
         .map_err(|_| Error::new(std::io::ErrorKind::InvalidData, type_name))
 }
 
-pub fn deserialize_declaration_from_schema(
+fn deserialize_declaration_from_schema(
     buf: &mut &[u8],
     schema: &BorshSchemaContainer,
     declaration: &borsh::schema::Declaration,
@@ -190,7 +190,7 @@ where
     Ok(())
 }
 
-pub fn serialize_declaration_with_schema(
+fn serialize_declaration_with_schema(
     writer: &mut impl Write,
     value: &serde_json::Value,
     schema: &BorshSchemaContainer,
