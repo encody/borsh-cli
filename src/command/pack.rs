@@ -38,10 +38,10 @@ impl TryFrom<&'_ PackArgs> for Pack {
 impl super::Execute for Pack {
     fn execute(&mut self) -> Result<(), super::IOError> {
         if self.no_schema {
-            super::output_borsh2(&mut self.output, &self.input)
+            super::output_borsh(&mut self.output, &self.input)
         } else {
             let schema = Vec::<u8>::schema_container();
-            super::output_borsh2(&mut self.output, &(schema, &self.input))
+            super::output_borsh(&mut self.output, &(schema, &self.input))
         }
     }
 }

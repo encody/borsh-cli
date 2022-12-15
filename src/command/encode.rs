@@ -5,7 +5,7 @@ use clap::Args;
 
 use crate::{dynamic_schema::serialize_with_schema, json_borsh::JsonSerializableAsBorsh};
 
-use super::{get_input_bytes, output_borsh2, output_writer, Execute, IOError};
+use super::{get_input_bytes, output_borsh, output_writer, Execute, IOError};
 
 #[derive(Args, Debug)]
 /// Convert JSON to Borsh.
@@ -61,7 +61,7 @@ impl Execute for Encode {
             serialize_with_schema(writer, &self.input, &schema).map_err(|_| IOError::WriteBorsh)?;
             Ok(())
         } else {
-            output_borsh2(writer, &JsonSerializableAsBorsh(&self.input))
+            output_borsh(writer, &JsonSerializableAsBorsh(&self.input))
         }
     }
 }

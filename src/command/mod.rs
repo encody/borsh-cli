@@ -4,12 +4,14 @@ use std::{
     path::PathBuf,
 };
 
-use borsh::{schema::BorshSchemaContainer, BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use clap::Subcommand;
 use serde::Serialize;
 use thiserror::Error;
 
-use self::{decode::Decode, encode::Encode, pack::Pack, unpack::Unpack};
+use self::{
+    decode::Decode, encode::Encode, extract::Extract, pack::Pack, strip::Strip, unpack::Unpack,
+};
 
 mod decode;
 mod encode;
@@ -39,28 +41,8 @@ impl Command {
             Command::Unpack(args) => Unpack::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Encode(args) => Encode::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Decode(args) => Decode::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Extract(extract::ExtractArgs { input, output }) => {
-                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
-
-                let mut buf = &input_bytes as &[u8];
-
-                let schema =
-                    <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
-
-                output_borsh(output.as_ref(), &schema, None);
-            }
-            Command::Strip(strip::StripArgs { input, output }) => {
-                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
-
-                let mut buf = &input_bytes as &[u8];
-
-                let _ = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
-
-                output_writer(output.as_ref())
-                    .unwrap()
-                    .write_all(buf)
-                    .expect("Unable to write output");
-            }
+            Command::Extract(args) => Extract::execute(&mut args.try_into().unwrap()).unwrap(),
+            Command::Strip(args) => Strip::execute(&mut args.try_into().unwrap()).unwrap(),
         }
     }
 }
@@ -115,23 +97,8 @@ fn output_bytes(mut writer: impl Write, value: &[u8]) -> Result<(), IOError> {
     writer.write_all(value).map_err(|_| IOError::WriteBytes)
 }
 
-fn output_borsh2(writer: impl Write, value: impl BorshSerialize) -> Result<(), IOError> {
+fn output_borsh(writer: impl Write, value: impl BorshSerialize) -> Result<(), IOError> {
     borsh::to_writer(writer, &value).map_err(|_| IOError::WriteBorsh)
-}
-
-fn output_borsh(
-    output: Option<&PathBuf>,
-    value: &impl BorshSerialize,
-    schema: Option<&BorshSchemaContainer>,
-) {
-    let writer = output_writer(output).unwrap();
-
-    if let Some(schema) = schema {
-        borsh::to_writer(writer, &(schema, value))
-    } else {
-        borsh::to_writer(writer, value)
-    }
-    .expect("Failed to write Borsh");
 }
 
 fn output_json(writer: impl Write, value: &impl Serialize) -> Result<(), IOError> {
@@ -144,9 +111,7 @@ mod tests {
     use borsh::{BorshSchema, BorshSerialize};
     use serde::Serialize;
 
-    use crate::command::output_writer;
-
-    use super::{output_borsh, output_json};
+    use crate::command::{output_borsh, output_json, output_writer};
 
     #[test]
     fn test_schema() {
@@ -199,9 +164,8 @@ mod tests {
             // Some(&First::schema_container()),
         );
         output_borsh(
-            Some(&"./dataandschema.borsh".into()),
-            &v,
-            Some(&First::schema_container()),
+            &mut output_writer(Some(&"./dataandschema.borsh".into())).unwrap(),
+            (&v, &First::schema_container()),
         );
     }
 
