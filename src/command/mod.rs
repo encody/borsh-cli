@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::json_borsh::JsonSerializableAsBorsh;
 
-use self::{pack::Pack, unpack::Unpack};
+use self::{encode::Encode, pack::Pack, unpack::Unpack};
 
 mod decode;
 mod encode;
@@ -39,33 +39,7 @@ impl Command {
         match self {
             Command::Pack(args) => Pack::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Unpack(args) => Unpack::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Encode(encode::EncodeArgs {
-                input,
-                output,
-                schema,
-            }) => {
-                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
-
-                let v = serde_json::from_slice::<serde_json::Value>(&input_bytes)
-                    .expect("Could not parse input as JSON");
-
-                if let Some(schema_path) = schema {
-                    let schema_bytes = get_input_bytes(Some(schema_path)).unwrap();
-                    let mut writer = output_writer(output.as_ref()).unwrap();
-                    let schema = <BorshSchemaContainer as BorshDeserialize>::deserialize(
-                        &mut (&schema_bytes as &[u8]),
-                    )
-                    .expect("Could not parse schema");
-                    BorshSerialize::serialize(&schema, &mut writer)
-                        .expect("could not serialize schema to output");
-                    crate::dynamic_schema::serialize_with_schema(&mut writer, &v, &schema)
-                        .expect("Could not write output");
-                } else {
-                    let v = JsonSerializableAsBorsh(&v);
-
-                    output_borsh(output.as_ref(), &v, None);
-                }
-            }
+            Command::Encode(args) => Encode::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Decode(decode::DecodeArgs { input, output }) => {
                 let input_bytes = get_input_bytes(input.as_ref()).unwrap();
 
@@ -77,7 +51,7 @@ impl Command {
                 let value = crate::dynamic_schema::deserialize_from_schema(&mut buf, &schema)
                     .expect("Unable to deserialize according to embedded schema");
 
-                output_json(output.as_ref(), &value);
+                output_json(output.as_ref(), &value).unwrap();
             }
             Command::Extract(extract::ExtractArgs { input, output }) => {
                 let input_bytes = get_input_bytes(input.as_ref()).unwrap();
@@ -121,6 +95,8 @@ pub enum IOError {
     WriteBytes,
     #[error("Failed to deserialize input as Borsh {0}")]
     DeserializeBorsh(&'static str),
+    #[error("Failed to deserialize input as Json")]
+    DeserializeJson,
     #[error("Unexpected schema header: {0}")]
     IncorrectBorshSchemaHeader(String),
 }
@@ -142,7 +118,7 @@ fn read_stdin() -> Result<Vec<u8>, IOError> {
 fn output_writer(output: Option<&PathBuf>) -> Result<Box<dyn Write>, IOError> {
     if let Some(o) = output {
         let f =
-            fs::File::create(o).map_err(|e| IOError::CreateOutputFile(o.display().to_string()))?;
+            fs::File::create(o).map_err(|_e| IOError::CreateOutputFile(o.display().to_string()))?;
         Ok(Box::new(f) as Box<dyn Write>)
     } else {
         Ok(Box::new(io::stdout()) as Box<dyn Write>)
