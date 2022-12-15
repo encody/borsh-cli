@@ -4,14 +4,12 @@ use std::{
     path::PathBuf,
 };
 
-use borsh::{schema::BorshSchemaContainer, BorshDeserialize, BorshSchema, BorshSerialize};
-use clap::{Args, Subcommand};
+use borsh::{schema::BorshSchemaContainer, BorshDeserialize, BorshSerialize};
+use clap::Subcommand;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::json_borsh::JsonSerializableAsBorsh;
-
-use self::{encode::Encode, pack::Pack, unpack::Unpack};
+use self::{decode::Decode, encode::Encode, pack::Pack, unpack::Unpack};
 
 mod decode;
 mod encode;
@@ -40,19 +38,7 @@ impl Command {
             Command::Pack(args) => Pack::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Unpack(args) => Unpack::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Encode(args) => Encode::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Decode(decode::DecodeArgs { input, output }) => {
-                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
-
-                let mut buf = &input_bytes as &[u8];
-
-                let schema =
-                    <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
-
-                let value = crate::dynamic_schema::deserialize_from_schema(&mut buf, &schema)
-                    .expect("Unable to deserialize according to embedded schema");
-
-                output_json(output.as_ref(), &value).unwrap();
-            }
+            Command::Decode(args) => Decode::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Extract(extract::ExtractArgs { input, output }) => {
                 let input_bytes = get_input_bytes(input.as_ref()).unwrap();
 
@@ -125,7 +111,7 @@ fn output_writer(output: Option<&PathBuf>) -> Result<Box<dyn Write>, IOError> {
     }
 }
 
-fn output_bytes(writer: &mut impl Write, value: &[u8]) -> Result<(), IOError> {
+fn output_bytes(mut writer: impl Write, value: &[u8]) -> Result<(), IOError> {
     writer.write_all(value).map_err(|_| IOError::WriteBytes)
 }
 
@@ -148,8 +134,7 @@ fn output_borsh(
     .expect("Failed to write Borsh");
 }
 
-fn output_json(output: Option<&PathBuf>, value: &impl Serialize) -> Result<(), IOError> {
-    let writer = output_writer(output)?;
+fn output_json(writer: impl Write, value: &impl Serialize) -> Result<(), IOError> {
     serde_json::to_writer(writer, value).map_err(|_| IOError::WriteJson)
 }
 
@@ -158,6 +143,8 @@ fn output_json(output: Option<&PathBuf>, value: &impl Serialize) -> Result<(), I
 mod tests {
     use borsh::{BorshSchema, BorshSerialize};
     use serde::Serialize;
+
+    use crate::command::output_writer;
 
     use super::{output_borsh, output_json};
 
@@ -207,7 +194,7 @@ mod tests {
         };
         borsh::try_to_vec_with_schema(&v);
         output_json(
-            Some(&"./dataonly.json".into()),
+            &mut output_writer(Some(&"./dataonly.json".into())).unwrap(),
             &v,
             // Some(&First::schema_container()),
         );
