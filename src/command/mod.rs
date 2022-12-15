@@ -7,10 +7,11 @@ use std::{
 use borsh::{schema::BorshSchemaContainer, BorshDeserialize, BorshSchema, BorshSerialize};
 use clap::{Args, Subcommand};
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::json_borsh::JsonSerializableAsBorsh;
 
-use self::pack::Pack;
+use self::{pack::Pack, unpack::Unpack};
 
 mod decode;
 mod encode;
@@ -20,7 +21,7 @@ mod strip;
 mod unpack;
 
 pub(self) trait Execute {
-    fn execute(&mut self);
+    fn execute(&mut self) -> Result<(), IOError>;
 }
 
 #[derive(Subcommand, Debug)]
@@ -36,48 +37,21 @@ pub enum Command {
 impl Command {
     pub fn run(&self) {
         match self {
-            Command::Pack(args) => {
-                Pack::execute(&mut args.into())
-            }
-            Command::Unpack(unpack::UnpackArgs {
-                input,
-                output,
-                no_schema,
-            }) => {
-                let input_bytes = get_input_bytes(input.as_ref());
-
-                let value = if *no_schema {
-                    Vec::<u8>::try_from_slice(&input_bytes)
-                        .expect("Could not read input as byte array")
-                } else {
-                    let (schema, v) =
-                        <(BorshSchemaContainer, Vec<u8>)>::try_from_slice(&input_bytes)
-                            .expect("Could not read input as byte array with schema headers");
-                    assert_eq!(
-                        schema,
-                        Vec::<u8>::schema_container(),
-                        "Unexpected schema header: {}",
-                        schema.declaration,
-                    );
-                    v
-                };
-
-                let mut writer = output_writer(output.as_ref());
-                writer.write_all(&value).expect("Failed output");
-            }
+            Command::Pack(args) => Pack::execute(&mut args.try_into().unwrap()).unwrap(),
+            Command::Unpack(args) => Unpack::execute(&mut args.try_into().unwrap()).unwrap(),
             Command::Encode(encode::EncodeArgs {
                 input,
                 output,
                 schema,
             }) => {
-                let input_bytes = get_input_bytes(input.as_ref());
+                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
 
                 let v = serde_json::from_slice::<serde_json::Value>(&input_bytes)
                     .expect("Could not parse input as JSON");
 
                 if let Some(schema_path) = schema {
-                    let schema_bytes = get_input_bytes(Some(schema_path));
-                    let mut writer = output_writer(output.as_ref());
+                    let schema_bytes = get_input_bytes(Some(schema_path)).unwrap();
+                    let mut writer = output_writer(output.as_ref()).unwrap();
                     let schema = <BorshSchemaContainer as BorshDeserialize>::deserialize(
                         &mut (&schema_bytes as &[u8]),
                     )
@@ -93,7 +67,7 @@ impl Command {
                 }
             }
             Command::Decode(decode::DecodeArgs { input, output }) => {
-                let input_bytes = get_input_bytes(input.as_ref());
+                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
 
                 let mut buf = &input_bytes as &[u8];
 
@@ -106,7 +80,7 @@ impl Command {
                 output_json(output.as_ref(), &value);
             }
             Command::Extract(extract::ExtractArgs { input, output }) => {
-                let input_bytes = get_input_bytes(input.as_ref());
+                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
 
                 let mut buf = &input_bytes as &[u8];
 
@@ -116,13 +90,14 @@ impl Command {
                 output_borsh(output.as_ref(), &schema, None);
             }
             Command::Strip(strip::StripArgs { input, output }) => {
-                let input_bytes = get_input_bytes(input.as_ref());
+                let input_bytes = get_input_bytes(input.as_ref()).unwrap();
 
                 let mut buf = &input_bytes as &[u8];
 
                 let _ = <BorshSchemaContainer as BorshDeserialize>::deserialize(&mut buf).unwrap();
 
                 output_writer(output.as_ref())
+                    .unwrap()
                     .write_all(buf)
                     .expect("Unable to write output");
             }
@@ -130,38 +105,56 @@ impl Command {
     }
 }
 
-fn get_input_bytes(input_path: Option<&PathBuf>) -> Vec<u8> {
-    input_path
-        .map(|path| {
-            fs::read(path)
-                .unwrap_or_else(|_| panic!("Could not read input file {}", path.display()))
-        })
-        .unwrap_or_else(read_stdin)
+#[derive(Error, Debug)]
+pub enum IOError {
+    #[error("Failed to read input file {0}")]
+    ReadInputFile(String),
+    #[error("Failed to read from STDIN")]
+    ReadStdin,
+    #[error("Failed to create output file {0}")]
+    CreateOutputFile(String),
+    #[error("Failed to write Borsh")]
+    WriteBorsh,
+    #[error("Failed to write JSON")]
+    WriteJson,
+    #[error("Failed to write raw bytes")]
+    WriteBytes,
+    #[error("Failed to deserialize input as Borsh {0}")]
+    DeserializeBorsh(&'static str),
+    #[error("Unexpected schema header: {0}")]
+    IncorrectBorshSchemaHeader(String),
 }
 
-fn read_stdin() -> Vec<u8> {
+fn get_input_bytes(input_path: Option<&PathBuf>) -> Result<Vec<u8>, IOError> {
+    input_path.map_or_else(read_stdin, |path| {
+        fs::read(path).map_err(|_| IOError::ReadInputFile(path.display().to_string()))
+    })
+}
+
+fn read_stdin() -> Result<Vec<u8>, IOError> {
     let mut v = Vec::new();
     io::stdin()
         .read_to_end(&mut v)
-        .expect("Could not read from STDIN");
-    v
+        .map_err(|_e| IOError::ReadStdin)?;
+    Ok(v)
 }
 
-fn output_writer(output: Option<&PathBuf>) -> Box<dyn Write> {
+fn output_writer(output: Option<&PathBuf>) -> Result<Box<dyn Write>, IOError> {
     if let Some(o) = output {
-        let f = fs::File::create(o)
-            .unwrap_or_else(|_| panic!("Could not create output file {}", o.display()));
-        Box::new(f) as Box<dyn Write>
+        let f =
+            fs::File::create(o).map_err(|e| IOError::CreateOutputFile(o.display().to_string()))?;
+        Ok(Box::new(f) as Box<dyn Write>)
     } else {
-        Box::new(io::stdout()) as Box<dyn Write>
+        Ok(Box::new(io::stdout()) as Box<dyn Write>)
     }
 }
 
-fn output_borsh2(
-    writer: impl Write,
-    value: impl BorshSerialize,
-) {
-    borsh::to_writer(writer, &value).expect("Failed to write Borsh");
+fn output_bytes(writer: &mut impl Write, value: &[u8]) -> Result<(), IOError> {
+    writer.write_all(value).map_err(|_| IOError::WriteBytes)
+}
+
+fn output_borsh2(writer: impl Write, value: impl BorshSerialize) -> Result<(), IOError> {
+    borsh::to_writer(writer, &value).map_err(|_| IOError::WriteBorsh)
 }
 
 fn output_borsh(
@@ -169,7 +162,7 @@ fn output_borsh(
     value: &impl BorshSerialize,
     schema: Option<&BorshSchemaContainer>,
 ) {
-    let writer = output_writer(output);
+    let writer = output_writer(output).unwrap();
 
     if let Some(schema) = schema {
         borsh::to_writer(writer, &(schema, value))
@@ -179,9 +172,9 @@ fn output_borsh(
     .expect("Failed to write Borsh");
 }
 
-fn output_json(output: Option<&PathBuf>, value: &impl Serialize) {
-    let writer = output_writer(output);
-    serde_json::to_writer(writer, value).expect("Failed to write JSON");
+fn output_json(output: Option<&PathBuf>, value: &impl Serialize) -> Result<(), IOError> {
+    let writer = output_writer(output)?;
+    serde_json::to_writer(writer, value).map_err(|_| IOError::WriteJson)
 }
 
 #[cfg(test)]

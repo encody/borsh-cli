@@ -23,23 +23,25 @@ pub struct Pack {
     pub no_schema: bool,
 }
 
-impl From<&'_ PackArgs> for Pack {
-    fn from(args: &'_ PackArgs) -> Self {
-        Self {
-            input: super::get_input_bytes(args.input_path.as_ref()),
-            output: super::output_writer(args.output_path.as_ref()),
+impl TryFrom<&'_ PackArgs> for Pack {
+    type Error = super::IOError;
+
+    fn try_from(args: &'_ PackArgs) -> Result<Self, Self::Error> {
+        Ok(Self {
+            input: super::get_input_bytes(args.input_path.as_ref())?,
+            output: super::output_writer(args.output_path.as_ref())?,
             no_schema: args.no_schema,
-        }
+        })
     }
 }
 
 impl super::Execute for Pack {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> Result<(), super::IOError> {
         if self.no_schema {
-            super::output_borsh2(&mut self.output, &self.input);
+            super::output_borsh2(&mut self.output, &self.input)
         } else {
             let schema = Vec::<u8>::schema_container();
-            super::output_borsh2(&mut self.output, &(schema, &self.input));
+            super::output_borsh2(&mut self.output, &(schema, &self.input))
         }
     }
 }
