@@ -19,7 +19,13 @@ pub struct UnpackArgs {
     pub no_schema: bool,
 }
 
-impl TryFrom<&'_ UnpackArgs> for Unpack {
+pub struct Unpack<'a> {
+    pub input: Vec<u8>,
+    pub output: Box<dyn Write + 'a>,
+    pub no_schema: bool,
+}
+
+impl TryFrom<&'_ UnpackArgs> for Unpack<'_> {
     type Error = super::IOError;
     fn try_from(args: &'_ UnpackArgs) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -30,13 +36,7 @@ impl TryFrom<&'_ UnpackArgs> for Unpack {
     }
 }
 
-pub struct Unpack {
-    pub input: Vec<u8>,
-    pub output: Box<dyn Write>,
-    pub no_schema: bool,
-}
-
-impl super::Execute for Unpack {
+impl super::Execute for Unpack<'_> {
     fn execute(&mut self) -> Result<(), super::IOError> {
         let value = if self.no_schema {
             Vec::<u8>::try_from_slice(&self.input)
@@ -51,5 +51,50 @@ impl super::Execute for Unpack {
         };
 
         output_bytes(&mut self.output, &value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::BufWriter;
+
+    use crate::command::Execute;
+
+    use super::Unpack;
+
+    #[test]
+    fn with_schema() {
+        let test_vector = vec![1u8, 2, 3, 4];
+        let mut output_vector: Vec<u8> = vec![];
+        let writer = BufWriter::new(&mut output_vector);
+
+        let mut p = Unpack {
+            input: borsh::try_to_vec_with_schema(&test_vector).unwrap(),
+            output: Box::new(writer),
+            no_schema: false,
+        };
+
+        p.execute().unwrap();
+        drop(p);
+
+        assert_eq!(test_vector, output_vector);
+    }
+
+    #[test]
+    fn without_schema() {
+        let test_vector = vec![1u8, 2, 3, 4];
+        let mut output_vector: Vec<u8> = vec![];
+        let writer = BufWriter::new(&mut output_vector);
+
+        let mut p = Unpack {
+            input: borsh::to_vec(&test_vector).unwrap().clone(),
+            output: Box::new(writer),
+            no_schema: true,
+        };
+
+        p.execute().unwrap();
+        drop(p);
+
+        assert_eq!(test_vector, output_vector);
     }
 }
