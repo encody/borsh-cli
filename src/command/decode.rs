@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn with_schema() {
+    fn test() {
         let value = Parent {
             integer: 24,
             vector: [8, 7, 6, 5, 4, 3, 2, 1],

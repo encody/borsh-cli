@@ -58,7 +58,7 @@ impl Execute for Encode<'_> {
         let writer = &mut self.output;
         if let Some(schema) = &self.schema {
             BorshSerialize::serialize(&schema, writer).map_err(|_| IOError::WriteBorsh)?;
-            serialize_with_schema(writer, &self.input, &schema).map_err(|_| IOError::WriteBorsh)?;
+            serialize_with_schema(writer, &self.input, schema).map_err(|_| IOError::WriteBorsh)?;
             Ok(())
         } else {
             output_borsh(writer, &JsonSerializableAsBorsh(&self.input))
