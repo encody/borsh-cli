@@ -17,13 +17,13 @@ pub struct PackArgs {
     pub no_schema: bool,
 }
 
-pub struct Pack {
+pub struct Pack<'a> {
     pub input: Vec<u8>,
-    pub output: Box<dyn Write>,
+    pub output: Box<dyn Write + 'a>,
     pub no_schema: bool,
 }
 
-impl TryFrom<&'_ PackArgs> for Pack {
+impl TryFrom<&'_ PackArgs> for Pack<'_> {
     type Error = super::IOError;
 
     fn try_from(args: &'_ PackArgs) -> Result<Self, Self::Error> {
@@ -35,7 +35,7 @@ impl TryFrom<&'_ PackArgs> for Pack {
     }
 }
 
-impl super::Execute for Pack {
+impl super::Execute for Pack<'_> {
     fn execute(&mut self) -> Result<(), super::IOError> {
         if self.no_schema {
             super::output_borsh(&mut self.output, &self.input)
@@ -43,5 +43,54 @@ impl super::Execute for Pack {
             let schema = Vec::<u8>::schema_container();
             super::output_borsh(&mut self.output, &(schema, &self.input))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::BufWriter;
+
+    use crate::command::Execute;
+
+    use super::Pack;
+
+    #[test]
+    fn with_schema() {
+        let test_vector = vec![1u8, 2, 3, 4];
+        let mut output_vector: Vec<u8> = vec![];
+        let writer = BufWriter::new(&mut output_vector);
+
+        let mut p = Pack {
+            input: test_vector.clone(),
+            output: Box::new(writer),
+            no_schema: false,
+        };
+
+        p.execute().unwrap();
+        drop(p);
+
+        let expected = borsh::try_to_vec_with_schema(&test_vector).unwrap();
+
+        assert_eq!(expected, output_vector);
+    }
+
+    #[test]
+    fn without_schema() {
+        let test_vector = vec![1u8, 2, 3, 4];
+        let mut output_vector: Vec<u8> = vec![];
+        let writer = BufWriter::new(&mut output_vector);
+
+        let mut p = Pack {
+            input: test_vector.clone(),
+            output: Box::new(writer),
+            no_schema: true,
+        };
+
+        p.execute().unwrap();
+        drop(p);
+
+        let expected = borsh::to_vec(&test_vector).unwrap();
+
+        assert_eq!(expected, output_vector);
     }
 }
