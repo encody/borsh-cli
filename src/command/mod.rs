@@ -114,6 +114,7 @@ mod tests {
     use crate::command::{output_borsh, output_json, output_writer};
 
     #[test]
+    #[ignore = "pollution"]
     fn test_schema() {
         #[derive(BorshSerialize, BorshSchema, Serialize)]
         struct First {

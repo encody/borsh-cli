@@ -24,13 +24,13 @@ pub struct EncodeArgs {
     pub schema: Option<PathBuf>,
 }
 
-pub struct Encode {
+pub struct Encode<'a> {
     pub input: serde_json::Value,
-    pub output: Box<dyn Write>,
+    pub output: Box<dyn Write + 'a>,
     pub schema: Option<BorshSchemaContainer>,
 }
 
-impl TryFrom<&'_ EncodeArgs> for Encode {
+impl TryFrom<&'_ EncodeArgs> for Encode<'_> {
     type Error = IOError;
 
     fn try_from(args: &'_ EncodeArgs) -> Result<Self, Self::Error> {
@@ -53,7 +53,7 @@ impl TryFrom<&'_ EncodeArgs> for Encode {
     }
 }
 
-impl Execute for Encode {
+impl Execute for Encode<'_> {
     fn execute(&mut self) -> Result<(), IOError> {
         let writer = &mut self.output;
         if let Some(schema) = &self.schema {
@@ -63,5 +63,102 @@ impl Execute for Encode {
         } else {
             output_borsh(writer, &JsonSerializableAsBorsh(&self.input))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::BufWriter;
+
+    use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use serde::{Deserialize, Serialize};
+
+    use crate::command::Execute;
+
+    use super::Encode;
+
+    #[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, Debug)]
+    struct Parent {
+        integer: u32,
+        vector: [u8; 8],
+        child: Child,
+    }
+
+    #[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Debug)]
+    struct JsonParent {
+        integer: f64,
+        vector: Vec<f64>,
+        child: Child,
+    }
+
+    #[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Debug)]
+    struct Child {
+        string: String,
+        boolean: bool,
+    }
+
+    #[test]
+    fn with_schema() {
+        let value = Parent {
+            integer: 24,
+            vector: [8, 7, 6, 5, 4, 3, 2, 1],
+            child: Child {
+                string: "()".to_string(),
+                boolean: false,
+            },
+        };
+
+        let mut output_vector: Vec<u8> = vec![];
+        let writer = BufWriter::new(&mut output_vector);
+
+        let mut p = Encode {
+            input: serde_json::to_value(&value).unwrap(),
+            output: Box::new(writer),
+            schema: Some(Parent::schema_container()),
+        };
+
+        p.execute().unwrap();
+        drop(p);
+
+        let expected = borsh::try_to_vec_with_schema(&value).unwrap();
+
+        assert_eq!(expected, output_vector);
+    }
+
+    #[test]
+    fn without_schema() {
+        let value = Parent {
+            integer: 24,
+            vector: [8, 7, 6, 5, 4, 3, 2, 1],
+            child: Child {
+                string: "()".to_string(),
+                boolean: false,
+            },
+        };
+        let expected = JsonParent {
+            integer: 24.0,
+            vector: vec![8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+            child: Child {
+                string: "()".to_string(),
+                boolean: false,
+            },
+        };
+
+        let mut output_vector: Vec<u8> = vec![];
+        let writer = BufWriter::new(&mut output_vector);
+
+        let mut p = Encode {
+            input: serde_json::to_value(&value).unwrap(),
+            output: Box::new(writer),
+            schema: None,
+        };
+
+        p.execute().unwrap();
+        drop(p);
+
+        assert_eq!(
+            <JsonParent as BorshDeserialize>::try_from_slice(&output_vector).unwrap(),
+            expected,
+        );
     }
 }
