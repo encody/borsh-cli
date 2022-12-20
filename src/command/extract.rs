@@ -46,7 +46,7 @@ impl Execute for Extract<'_> {
 mod tests {
     use std::io::BufWriter;
 
-    use borsh::{BorshDeserialize, BorshSchema, BorshSerialize, schema::BorshSchemaContainer};
+    use borsh::{schema::BorshSchemaContainer, BorshDeserialize, BorshSchema, BorshSerialize};
     use serde::{Deserialize, Serialize};
 
     use crate::command::Execute;

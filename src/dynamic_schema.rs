@@ -80,32 +80,29 @@ fn deserialize_declaration_from_schema(
                         deserialize_declaration_from_schema(buf, schema, variant_declaration)
                             .map(|v| json!({ variant_name: v }))
                     }
-                    Definition::Struct { fields } => {
-                        match fields {
-                            Fields::NamedFields(fields) => {
-                                let mut object = HashMap::<String, serde_json::Value>::new();
-                                for &(ref key, ref value_declaration) in fields {
-                                    let value = deserialize_declaration_from_schema(
-                                        buf,
-                                        schema,
-                                        value_declaration,
-                                    )?;
-                                    object.insert(key.to_string(), value);
-                                }
-                                Ok(serde_json::to_value(object)?)
+                    Definition::Struct { fields } => match fields {
+                        Fields::NamedFields(fields) => {
+                            let mut object = HashMap::<String, serde_json::Value>::new();
+                            for &(ref key, ref value_declaration) in fields {
+                                let value = deserialize_declaration_from_schema(
+                                    buf,
+                                    schema,
+                                    value_declaration,
+                                )?;
+                                object.insert(key.to_string(), value);
                             }
-                            Fields::UnnamedFields(elements) => {
-                                let mut v = Vec::<serde_json::Value>::with_capacity(elements.len());
-                                for element in elements {
-                                    let e =
-                                        deserialize_declaration_from_schema(buf, schema, element)?;
-                                    v.push(e);
-                                }
-                                Ok(v.into())
-                            }
-                            Fields::Empty => Ok(Vec::<u8>::new().into()),
+                            Ok(serde_json::to_value(object)?)
                         }
-                    }
+                        Fields::UnnamedFields(elements) => {
+                            let mut v = Vec::<serde_json::Value>::with_capacity(elements.len());
+                            for element in elements {
+                                let e = deserialize_declaration_from_schema(buf, schema, element)?;
+                                v.push(e);
+                            }
+                            Ok(v.into())
+                        }
+                        Fields::Empty => Ok(Vec::<u8>::new().into()),
+                    },
                 }
             } else {
                 todo!("Unknown type to deserialize: {declaration}")

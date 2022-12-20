@@ -84,14 +84,18 @@ mod tests {
         child: Child,
     }
 
-    #[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Debug)]
+    #[derive(
+        Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Debug,
+    )]
     struct JsonParent {
         integer: f64,
         vector: Vec<f64>,
         child: Child,
     }
 
-    #[derive(Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Debug)]
+    #[derive(
+        Serialize, Deserialize, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Debug,
+    )]
     struct Child {
         string: String,
         boolean: bool,

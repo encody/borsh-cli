@@ -87,7 +87,7 @@ mod tests {
         let writer = BufWriter::new(&mut output_vector);
 
         let mut p = Unpack {
-            input: borsh::to_vec(&test_vector).unwrap().clone(),
+            input: borsh::to_vec(&test_vector).unwrap(),
             output: Box::new(writer),
             no_schema: true,
         };
