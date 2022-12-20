@@ -36,13 +36,20 @@ pub enum Command {
 
 impl Command {
     pub fn run(&self) {
-        match self {
-            Command::Pack(args) => Pack::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Unpack(args) => Unpack::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Encode(args) => Encode::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Decode(args) => Decode::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Extract(args) => Extract::execute(&mut args.try_into().unwrap()).unwrap(),
-            Command::Strip(args) => Strip::execute(&mut args.try_into().unwrap()).unwrap(),
+        #[inline]
+        fn run_args<E: Execute>(args: impl TryInto<E, Error = IOError>) -> Result<(), IOError> {
+            E::execute(&mut args.try_into()?)
+        }
+
+        if let Err(e) = match self {
+            Command::Pack(args) => run_args::<Pack>(args),
+            Command::Unpack(args) => run_args::<Unpack>(args),
+            Command::Encode(args) => run_args::<Encode>(args),
+            Command::Decode(args) => run_args::<Decode>(args),
+            Command::Extract(args) => run_args::<Extract>(args),
+            Command::Strip(args) => run_args::<Strip>(args),
+        } {
+            eprintln!("Error: {e}");
         }
     }
 }
@@ -63,7 +70,7 @@ pub enum IOError {
     WriteBytes,
     #[error("Failed to deserialize input as Borsh {0}")]
     DeserializeBorsh(&'static str),
-    #[error("Failed to deserialize input as Json")]
+    #[error("Failed to deserialize input as JSON")]
     DeserializeJson,
     #[error("Unexpected schema header: {0}")]
     IncorrectBorshSchemaHeader(String),
@@ -101,8 +108,12 @@ fn output_borsh(writer: impl Write, value: impl BorshSerialize) -> Result<(), IO
     borsh::to_writer(writer, &value).map_err(|_| IOError::WriteBorsh)
 }
 
-fn output_json(writer: impl Write, value: &impl Serialize) -> Result<(), IOError> {
-    serde_json::to_writer(writer, value).map_err(|_| IOError::WriteJson)
+fn output_json(writer: impl Write, value: &impl Serialize, pretty: bool) -> Result<(), IOError> {
+    if pretty {
+        serde_json::to_writer_pretty(writer, value).map_err(|_| IOError::WriteJson)
+    } else {
+        serde_json::to_writer(writer, value).map_err(|_| IOError::WriteJson)
+    }
 }
 
 #[cfg(test)]
@@ -162,6 +173,7 @@ mod tests {
         output_json(
             &mut output_writer(Some(&"./dataonly.json".into())).unwrap(),
             &v,
+            false,
             // Some(&First::schema_container()),
         );
         output_borsh(

@@ -15,11 +15,16 @@ pub struct DecodeArgs {
 
     /// Write output to this file, otherwise to stdout.
     pub output_path: Option<PathBuf>,
+
+    /// Format output
+    #[arg(short, long)]
+    pub pretty: bool,
 }
 
 pub struct Decode<'a> {
     pub input: Vec<u8>,
     pub output: Box<dyn Write + 'a>,
+    pub pretty: bool,
 }
 
 impl TryFrom<&'_ DecodeArgs> for Decode<'_> {
@@ -29,11 +34,13 @@ impl TryFrom<&'_ DecodeArgs> for Decode<'_> {
         DecodeArgs {
             input_path,
             output_path,
+            pretty,
         }: &'_ DecodeArgs,
     ) -> Result<Self, Self::Error> {
         Ok(Self {
             input: get_input_bytes(input_path.as_ref())?,
             output: output_writer(output_path.as_ref())?,
+            pretty: *pretty,
         })
     }
 }
@@ -48,7 +55,7 @@ impl Execute for Decode<'_> {
         let value = crate::dynamic_schema::deserialize_from_schema(&mut buf, &schema)
             .map_err(|_| IOError::DeserializeBorsh("data according to embedded schema"))?;
 
-        output_json(&mut self.output, &value)
+        output_json(&mut self.output, &value, self.pretty)
     }
 }
 
@@ -95,6 +102,7 @@ mod tests {
         let mut p = Decode {
             input: borsh::try_to_vec_with_schema(&value).unwrap(),
             output: Box::new(writer),
+            pretty: false,
         };
 
         p.execute().unwrap();
