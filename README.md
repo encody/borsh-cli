@@ -4,7 +4,7 @@ Command line utility for basic [Borsh](https://borsh.io/)-serialized data manipu
 
 ## Install
 
-```txt
+```text
 $ cargo install borsh-cli
 ```
 
@@ -13,7 +13,7 @@ $ cargo install borsh-cli
 ```text
 Command-line utility for manipulating Borsh-serialized data
 
-Note: Does not play particularly nicely with `HashMap<_, _>` types.
+Note: Does not play particularly nicely with `HashMap<_, _>` types in schema.
 
 Usage: borsh[EXE] <COMMAND>
 
@@ -27,9 +27,9 @@ Commands:
   decode
           Decode Borsh input to JSON
   extract
-          Extracts the Borsh schema header
+          Extract the Borsh schema header
   strip
-          Removes the Borsh schema header
+          Remove the Borsh schema header
   help
           Print this message or the help of the given subcommand(s)
 
@@ -41,7 +41,7 @@ Options:
           Print version information
 ```
 
-Generally, every sub-command will read from STDIN and output to STDOUT unless the `-i`/`--input` flag or `-o`/`--output` flags are specified, respectively.
+Generally, every sub-command will read from STDIN and output to STDOUT unless the optional `[INPUT_PATH] [OUTPUT_PATH]` positional arguments are specified, respectively.
 
 ## Examples
 
@@ -71,19 +71,19 @@ AABzdHJpbmc=
 
 $ cat data.json
 {
-  "a": [32, 64],
-  "b": "String",
-  "c": {
-    "a": { "Alpha": { "field": 1 } },
-    "b": { "Beta": 1 },
-    "c": "Gamma",
-    "d": 2,
-    "e": 3
-  },
-  "e": ["a", "b", "c"]
+    "a": [32, 64],
+    "b": "String",
+    "c": {
+        "a": { "Alpha": { "field": 1 } },
+        "b": { "Beta": 1 },
+        "c": "Gamma",
+        "d": 2,
+        "e": 3
+    },
+    "e": ["a", "b", "c"]
 }
 
-$ borsh encode -i data.json -s schema.borshschema -o data.borsh
+$ borsh encode -s schema.borshschema data.json data.borsh
 $ cat data.borsh | base64
 BQAAAEZpcnN0CAAAAAUAAABGaXJzdAQABAAAAAEAAABhDwAAAFR1cGxlPHUzMiwgdTY0PgEAAABi
 BgAAAHN0cmluZwEAAABjBgAAAFNlY29uZAEAAABlCwAAAFZlYzxzdHJpbmc+BgAAAFNlY29uZAQA
@@ -95,7 +95,7 @@ Ag8AAABUdXBsZTx1MzIsIHU2ND4CAgAAAAMAAAB1MzIDAAAAdTY0CwAAAFZlYzxzdHJpbmc+AQYA
 AABzdHJpbmcgAAAAQAAAAAAAAAAGAAAAU3RyaW5nAAEAAAABAQAAAAICAAAAAwAAAAMAAAABAAAA
 YQEAAABiAQAAAGM=
 
-$ borsh decode -i data.borsh
+$ borsh decode data.borsh
 {"e":["a","b","c"],"b":"String","a":[32,64],"c":{"e":3,"b":{"Beta":[1]},"a":{"Alpha":{"field":1}},"c":{"Gamma":[]},"d":2}}
 ```
 
@@ -106,11 +106,11 @@ Not recommended for highly-structured data.
 ```text
 $ cat data.json
 {
-  "definitely_pi": 2.718281828459045,
-  "trustworthy": false
+    "definitely_pi": 2.718281828459045,
+    "trustworthy": false
 }
 
-$ borsh encode -i data.json -o data.borsh
+$ borsh encode data.json data.borsh
 $ cat data.borsh | base64
 aVcUiwq/BUAA
 ```
@@ -142,7 +142,9 @@ use borsh::{BorshSchema, BorshSerialize};
 struct MyStruct { /* ... */ }
 
 fn serialize(data: MyStruct) {
-  let serialized_with_schema: Vec<u8> = borsh::try_to_vec_with_schema(&data).unwrap();
+    let serialized_with_schema: Vec<u8> = borsh::try_to_vec_with_schema(&data).unwrap();
+
+    let schema_bytes: Vec<u8> = MyStruct::schema_container().try_to_vec().unwrap();
 
   // ...
 }
