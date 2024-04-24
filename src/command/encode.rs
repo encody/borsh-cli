@@ -152,7 +152,7 @@ mod tests {
         let writer = BufWriter::new(&mut output_vector);
 
         let mut p = Encode {
-            input: serde_json::to_value(&value).unwrap(),
+            input: serde_json::to_value(value).unwrap(),
             output: Box::new(writer),
             schema: None,
         };

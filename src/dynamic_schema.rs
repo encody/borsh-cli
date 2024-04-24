@@ -83,7 +83,7 @@ fn deserialize_declaration_from_schema(
                     Definition::Struct { fields } => match fields {
                         Fields::NamedFields(fields) => {
                             let mut object = HashMap::<String, serde_json::Value>::new();
-                            for &(ref key, ref value_declaration) in fields {
+                            for (key, value_declaration) in fields {
                                 let value = deserialize_declaration_from_schema(
                                     buf,
                                     schema,

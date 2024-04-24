@@ -20,7 +20,7 @@ mod pack;
 mod strip;
 mod unpack;
 
-pub(self) trait Execute {
+trait Execute {
     fn execute(&mut self) -> Result<(), IOError>;
 }
 
