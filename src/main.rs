@@ -1,5 +1,6 @@
 use clap::Parser;
 
+mod compress_schema;
 mod command;
 mod dynamic_schema;
 mod json_borsh;

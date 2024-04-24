@@ -22,12 +22,17 @@ pub struct EncodeArgs {
     /// Schema to follow when serializing.
     #[arg(short, long)]
     pub schema: Option<PathBuf>,
+
+    /// Compress schema
+    #[arg(short, long)]
+    pub compress: bool,
 }
 
 pub struct Encode<'a> {
     pub input: serde_json::Value,
     pub output: Box<dyn Write + 'a>,
     pub schema: Option<BorshSchemaContainer>,
+    pub compress: bool,
 }
 
 impl TryFrom<&'_ EncodeArgs> for Encode<'_> {
@@ -49,6 +54,7 @@ impl TryFrom<&'_ EncodeArgs> for Encode<'_> {
             } else {
                 None
             },
+            compress: args.compress,
         })
     }
 }
@@ -119,6 +125,7 @@ mod tests {
             input: serde_json::to_value(&value).unwrap(),
             output: Box::new(writer),
             schema: Some(Parent::schema_container()),
+            compress: false,
         };
 
         p.execute().unwrap();
@@ -155,6 +162,7 @@ mod tests {
             input: serde_json::to_value(&value).unwrap(),
             output: Box::new(writer),
             schema: None,
+            compress: false,
         };
 
         p.execute().unwrap();

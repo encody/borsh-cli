@@ -132,7 +132,6 @@ mod tests {
             a: (u32, u64),
             b: String,
             c: Second,
-            // d: HashMap<String, bool>,
             e: Vec<String>,
         }
 
@@ -153,7 +152,6 @@ mod tests {
         }
 
         dbg!("{:?}", First::schema_container());
-        // return;
         let v = First {
             a: (32, 64),
             b: "String".to_string(),
@@ -164,9 +162,6 @@ mod tests {
                 d: 2,
                 e: 3,
             },
-            // d: vec![("true".to_string(), true), ("false".to_string(), false)]
-            //     .into_iter()
-            //     .collect(),
             e: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         };
         borsh::try_to_vec_with_schema(&v);
@@ -174,7 +169,6 @@ mod tests {
             &mut output_writer(Some(&"./dataonly.json".into())).unwrap(),
             &v,
             false,
-            // Some(&First::schema_container()),
         );
         output_borsh(
             &mut output_writer(Some(&"./dataandschema.borsh".into())).unwrap(),
